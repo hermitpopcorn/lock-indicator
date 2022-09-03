@@ -1,0 +1,30 @@
+[package]
+name = "lock-indicator"
+version = "1.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tray-item = "0.7"
+
+[dependencies.windows]
+version = "0.39.0"
+features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+]
+
+[build-dependencies]
+winres = "0.1"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[package.metadata.winres]
+OriginalFilename = "lock-indicator.exe"
+FileDescription = "Lock Indicator"
+ProductName = "Lock Indicator"
+ProductVersion = "1.0.0"
