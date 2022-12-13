@@ -2,11 +2,18 @@
 name = "lock-indicator"
 version = "1.0.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-tray-item = "0.7"
+[dependencies.native-windows-gui]
+version = "1.0.12"
+features = [
+    "no-styling"
+]
+
+[dependencies.native-windows-derive]
+version = "1.0.3"
 
 [dependencies.windows]
 version = "0.39.0"
@@ -15,16 +22,10 @@ features = [
 ]
 
 [build-dependencies]
-winres = "0.1"
+embed-resource = "1.3"
 
 [profile.release]
 strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-
-[package.metadata.winres]
-OriginalFilename = "lock-indicator.exe"
-FileDescription = "Lock Indicator"
-ProductName = "Lock Indicator"
-ProductVersion = "1.0.0"

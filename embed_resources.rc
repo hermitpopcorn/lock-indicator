@@ -1,0 +1,6 @@
+#define RT_MANIFEST 24
+1 RT_MANIFEST "embed_resources.exe.manifest"
+STATE0ICON ICON "resource/state0.ico"
+STATE1ICON ICON "resource/state1.ico"
+STATE2ICON ICON "resource/state2.ico"
+STATE3ICON ICON "resource/state3.ico"
