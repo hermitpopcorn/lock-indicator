@@ -54,6 +54,7 @@ pub struct LockIndicator {
     num_lock_off_image: nwg::Bitmap,
 
     #[nwg_control(size: (SIZE, SIZE), bitmap: Some(&data.caps_lock_off_image))]
+    #[nwg_events(OnImageFrameClick: [LockIndicator::hide_splash])]
     image_frame: nwg::ImageFrame,
 }
 
