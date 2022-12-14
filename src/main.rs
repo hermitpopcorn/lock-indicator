@@ -3,12 +3,15 @@
 extern crate native_windows_gui as nwg;
 extern crate native_windows_derive as nwd;
 
+use std::{sync::mpsc, thread, time};
+
 use nwd::NwgUi;
 use nwg::NativeUi;
 use winapi::um::winuser::{WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL, VK_NUMLOCK};
 
 const SIZE: i32 = 64;
+const SPLASH_DURATION_IN_MS: u64 = 1500;
 
 #[derive(Default, NwgUi)]
 pub struct LockIndicator {
@@ -126,7 +129,9 @@ fn main() {
     let ui = LockIndicator::build_ui(Default::default()).expect("Failed to build UI");
 
     let mut last_state = State { caps: false, num: false };
-    let mut timer = -1;
+    let mut latest_transmit: u8 = 250;
+    let (transmitter, receiver) = mpsc::channel::<u8>();
+
     nwg::dispatch_thread_events_with_callback(move || {
         let mut state = State { caps: false, num: false };
 
@@ -138,17 +143,24 @@ fn main() {
         if !last_state.equals(&state) {
             ui.change_icon(&last_state, &state);
             last_state = state;
-            timer = 50;
+            let cloned_transmitter = transmitter.clone();
+            match latest_transmit { // loop back counter to 0 if at ceiling
+                255 => latest_transmit = 0,
+                _ => latest_transmit += 1,
+            }
+            thread::spawn(move || {
+                thread::sleep(time::Duration::from_millis(SPLASH_DURATION_IN_MS));
+                cloned_transmitter.send(latest_transmit).unwrap();
+            });
         }
 
-        if timer == 0 {
-            ui.hide_splash();
+        match receiver.try_recv() {
+            Ok(id) => {
+                if id == latest_transmit {
+                    ui.hide_splash()
+                }
+            },
+            Err(_) => {}
         }
-
-        if timer > -1 {
-            timer -= 1;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(1));
     });
 }
