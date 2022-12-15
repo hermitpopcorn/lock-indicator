@@ -3,7 +3,7 @@
 extern crate native_windows_gui as nwg;
 extern crate native_windows_derive as nwd;
 
-use std::{sync::mpsc, thread, time};
+use std::{sync::mpsc, thread, time, cell::Cell};
 
 use nwd::NwgUi;
 use nwg::NativeUi;
@@ -16,6 +16,7 @@ const SPLASH_DURATION_IN_MS: u64 = 1500;
 #[derive(Default, NwgUi)]
 pub struct LockIndicator {
     #[nwg_control(size: (SIZE, SIZE), flags: "POPUP", ex_flags: WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW , topmost: true)]
+    #[nwg_events(OnInit: [LockIndicator::init])]
     window: nwg::Window,
 
     #[nwg_resource]
@@ -37,9 +38,15 @@ pub struct LockIndicator {
     #[nwg_control(parent: window, popup: true)]
     tray_menu: nwg::Menu,
 
+    #[nwg_control(parent: tray_menu, text: "Toggle OSD")]
+    #[nwg_events(OnMenuItemSelected: [LockIndicator::toggle_osd])]
+    toggle_osd_tray_item: nwg::MenuItem,
+
+    enable_osd: Cell<bool>,
+
     #[nwg_control(parent: tray_menu, text: "Exit")]
     #[nwg_events(OnMenuItemSelected: [LockIndicator::exit])]
-    tray_item: nwg::MenuItem,
+    exit_tray_item: nwg::MenuItem,
 
     #[nwg_resource(source_file: Some("./resource/caps-lock-on.png"), size: Some((SIZE.try_into().unwrap(), SIZE.try_into().unwrap())))]
     caps_lock_on_image: nwg::Bitmap,
@@ -59,6 +66,10 @@ pub struct LockIndicator {
 }
 
 impl LockIndicator {
+    fn init(&self) {
+        self.enable_osd.replace(true);
+    }
+
     fn change_icon(&self, last_state: &State, state: &State) {
         match state {
             State { caps: false, num: false } => self.tray.set_icon(&self.state0icon),
@@ -66,7 +77,10 @@ impl LockIndicator {
             State { caps: false, num: true } => self.tray.set_icon(&self.state2icon),
             State { caps: true, num: true } => self.tray.set_icon(&self.state3icon),
         }
-        self.show_splash(last_state, state);
+
+        if self.enable_osd.get() {
+            self.show_splash(last_state, state);
+        }
     }
 
     fn calculate_splash_position(&self) -> (i32, i32) {
@@ -107,6 +121,11 @@ impl LockIndicator {
     fn show_menu(&self) {
         let (x, y) = nwg::GlobalCursor::position();
         self.tray_menu.popup(x, y)
+    }
+
+    fn toggle_osd(&self) {
+        let current = self.enable_osd.get();
+        self.enable_osd.set(!current);
     }
     
     fn exit(&self) {
