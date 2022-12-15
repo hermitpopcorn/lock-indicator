@@ -3,8 +3,9 @@
 extern crate native_windows_gui as nwg;
 extern crate native_windows_derive as nwd;
 
-use std::{sync::mpsc, thread, time, cell::Cell};
+use std::{sync::mpsc::{Sender, Receiver, self}, thread, time, cell::{Cell, RefCell}};
 
+use derivative::Derivative;
 use nwd::NwgUi;
 use nwg::NativeUi;
 use winapi::um::winuser::{WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW};
@@ -13,10 +14,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL, VK_NU
 const SIZE: i32 = 64;
 const SPLASH_DURATION_IN_MS: u64 = 1500;
 
-#[derive(Default, NwgUi)]
+#[derive(Derivative, NwgUi)]
+#[derivative(Default)]
 pub struct LockIndicator {
     #[nwg_control(size: (SIZE, SIZE), flags: "POPUP", ex_flags: WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW , topmost: true)]
-    #[nwg_events(OnInit: [LockIndicator::init])]
     window: nwg::Window,
 
     #[nwg_resource]
@@ -42,6 +43,7 @@ pub struct LockIndicator {
     #[nwg_events(OnMenuItemSelected: [LockIndicator::toggle_osd])]
     toggle_osd_tray_item: nwg::MenuItem,
 
+    #[derivative(Default(value = "Cell::new(true)"))]
     enable_osd: Cell<bool>,
 
     #[nwg_control(parent: tray_menu, text: "Exit")]
@@ -63,13 +65,14 @@ pub struct LockIndicator {
     #[nwg_control(size: (SIZE, SIZE), bitmap: Some(&data.caps_lock_off_image))]
     #[nwg_events(OnImageFrameClick: [LockIndicator::hide_splash])]
     image_frame: nwg::ImageFrame,
+
+    last_state: RefCell<State>,
+    latest_transmit: RefCell<u8>,
+    #[derivative(Default(value = "RefCell::new(mpsc::channel::<u8>())"))]
+    channel: RefCell<(Sender<u8>, Receiver<u8>)>,
 }
 
 impl LockIndicator {
-    fn init(&self) {
-        self.enable_osd.replace(true);
-    }
-
     fn change_icon(&self, last_state: &State, state: &State) {
         match state {
             State { caps: false, num: false } => self.tray.set_icon(&self.state0icon),
@@ -127,12 +130,50 @@ impl LockIndicator {
         let current = self.enable_osd.get();
         self.enable_osd.set(!current);
     }
+
+    fn update(&self) {
+        let mut state = State { caps: false, num: false };
+        let last_state = *self.last_state.borrow();
+        let channel = self.channel.borrow();
+        let mut latest_transmit = *self.latest_transmit.borrow();
+
+        unsafe {
+            if GetKeyState(VK_CAPITAL.0.into()) == 1 { state.caps = true };
+            if GetKeyState(VK_NUMLOCK.0.into()) == 1 { state.num = true };
+        }
+
+        if !last_state.equals(&state) {
+            self.change_icon(&last_state, &state);
+            self.last_state.replace(state);
+            let cloned_transmitter = channel.0.clone();
+            match latest_transmit { // loop back counter to 0 if at ceiling
+                255 => latest_transmit = 0,
+                _ => latest_transmit += 1,
+            }
+            self.latest_transmit.replace(latest_transmit);
+
+            thread::spawn(move || {
+                thread::sleep(time::Duration::from_millis(SPLASH_DURATION_IN_MS));
+                cloned_transmitter.send(latest_transmit).unwrap();
+            });
+        }
+
+        match channel.1.try_recv() {
+            Ok(id) => {
+                if id == latest_transmit {
+                    self.hide_splash()
+                }
+            },
+            Err(_) => {}
+        }
+    }
     
     fn exit(&self) {
         nwg::stop_thread_dispatch()
     }
 }
 
+#[derive(Clone, Copy)]
 struct State {
     caps: bool,
     num: bool,
@@ -144,43 +185,14 @@ impl State {
     }
 }
 
+impl Default for State {
+    fn default() -> Self {
+        State { caps: false, num: false }
+    }
+}
+
 fn main() {
     nwg::init().expect("Failed to init Native Windows GUI");
     let ui = LockIndicator::build_ui(Default::default()).expect("Failed to build UI");
-
-    let mut last_state = State { caps: false, num: false };
-    let mut latest_transmit: u8 = 250;
-    let (transmitter, receiver) = mpsc::channel::<u8>();
-
-    nwg::dispatch_thread_events_with_callback(move || {
-        let mut state = State { caps: false, num: false };
-
-        unsafe {
-            if GetKeyState(VK_CAPITAL.0.into()) == 1 { state.caps = true };
-            if GetKeyState(VK_NUMLOCK.0.into()) == 1 { state.num = true };
-        }
-
-        if !last_state.equals(&state) {
-            ui.change_icon(&last_state, &state);
-            last_state = state;
-            let cloned_transmitter = transmitter.clone();
-            match latest_transmit { // loop back counter to 0 if at ceiling
-                255 => latest_transmit = 0,
-                _ => latest_transmit += 1,
-            }
-            thread::spawn(move || {
-                thread::sleep(time::Duration::from_millis(SPLASH_DURATION_IN_MS));
-                cloned_transmitter.send(latest_transmit).unwrap();
-            });
-        }
-
-        match receiver.try_recv() {
-            Ok(id) => {
-                if id == latest_transmit {
-                    ui.hide_splash()
-                }
-            },
-            Err(_) => {}
-        }
-    });
+    nwg::dispatch_thread_events_with_callback(move || ui.update());
 }
