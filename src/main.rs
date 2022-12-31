@@ -11,8 +11,14 @@ use nwg::NativeUi;
 use winapi::um::winuser::{WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL, VK_NUMLOCK};
 
+// the size of caps/num lock status splash in pixels
 const SIZE: i32 = 64;
+
+// the duration caps/num lock status splash shows for
 const SPLASH_DURATION_IN_MS: u64 = 1500;
+
+// the duration thread waits on every caps/num lock status check
+const WAIT_DURATION_IN_MS: u64 = 100;
 
 #[derive(Derivative, NwgUi)]
 #[derivative(Default)]
@@ -164,7 +170,9 @@ impl LockIndicator {
                     self.hide_splash()
                 }
             },
-            Err(_) => {}
+            Err(_) => {
+                thread::sleep(time::Duration::from_millis(WAIT_DURATION_IN_MS));
+            }
         }
     }
     
