@@ -18,7 +18,7 @@ const SIZE: i32 = 64;
 const SPLASH_DURATION_IN_MS: u64 = 1500;
 
 // the duration thread waits on every caps/num lock status check
-const WAIT_DURATION_IN_MS: u64 = 100;
+const WAIT_DURATION_IN_MS: u64 = 25;
 
 #[derive(Derivative, NwgUi)]
 #[derivative(Default)]
